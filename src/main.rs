@@ -1,5 +1,4 @@
 use std::env;
-use std::io::{self, Write};
 use std::process::Command;
 use std::process::ExitCode;
 
@@ -14,12 +13,12 @@ fn main() -> Result<ExitCode, std::io::Error> {
 
     match args_str.as_slice() {
         [_, "run", command, tail @ ..] => {
-            let output = Command::new(command).args(tail).output()?;
+            let status = Command::new(command).args(tail).status()?;
 
-            io::stdout().write_all(&output.stdout)?;
-            io::stderr().write_all(&output.stderr)?;
+            //io::stdout().write_all(&output.stdout)?;
+            //io::stderr().write_all(&output.stderr)?;
 
-            match output.status.code() {
+            match status.code() {
                 Some(code) => {
                     return Ok(ExitCode::from(to_exit_code(code)));
                 }
