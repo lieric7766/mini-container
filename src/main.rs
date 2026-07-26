@@ -1,4 +1,5 @@
 use std::env;
+use std::io::{self, Write};
 use std::process::Command;
 use std::process::ExitCode;
 use std::process::Stdio;
@@ -14,20 +15,29 @@ fn main() -> Result<ExitCode, std::io::Error> {
 
     match args_str.as_slice() {
         [_, "run", command, tail @ ..] => {
-            let status = Command::new(command)
+            let child = Command::new(command)
                 .args(tail)
-                .stdin(Stdio::inherit())
-                .stderr(Stdio::null())
-                .stdout(Stdio::piped())
-                .status()?;
+                .stdout(Stdio::inherit())
+                .spawn()?;
 
-            match status.code() {
-                Some(code) => {
-                    return Ok(ExitCode::from(to_exit_code(code)));
+            let output_result = child.wait_with_output();
+            match output_result {
+                Ok(output) => {
+                    match io::stdout().write_all(&output.stdout) {
+                        Ok(()) => {}
+                        Err(e) => return Err(e),
+                    }
+
+                    match output.status.code() {
+                        Some(code) => {
+                            return Ok(ExitCode::from(to_exit_code(code)));
+                        }
+                        None => {
+                            return Ok(ExitCode::FAILURE);
+                        }
+                    }
                 }
-                None => {
-                    return Ok(ExitCode::FAILURE);
-                }
+                Err(e) => return Err(e),
             }
         }
         _ => {
