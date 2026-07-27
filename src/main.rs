@@ -1,4 +1,5 @@
 use std::env;
+use std::io::Read;
 use std::io::{self, Write};
 use std::process::Command;
 use std::process::ExitCode;
@@ -15,29 +16,36 @@ fn main() -> Result<ExitCode, std::io::Error> {
 
     match args_str.as_slice() {
         [_, "run", command, tail @ ..] => {
-            let child = Command::new(command)
+            let mut child = Command::new(command)
                 .args(tail)
-                .stdout(Stdio::inherit())
+                .stdout(Stdio::piped())
                 .spawn()?;
 
-            let output_result = child.wait_with_output();
-            match output_result {
-                Ok(output) => {
-                    match io::stdout().write_all(&output.stdout) {
-                        Ok(()) => {}
-                        Err(e) => return Err(e),
-                    }
+            let Some(mut stdout) = child.stdout.take() else {
+                return Ok(ExitCode::FAILURE);
+            };
 
-                    match output.status.code() {
-                        Some(code) => {
-                            return Ok(ExitCode::from(to_exit_code(code)));
-                        }
-                        None => {
-                            return Ok(ExitCode::FAILURE);
-                        }
-                    }
+            let mut buffer = [0_u8; 1024];
+
+            loop {
+                let n = stdout.read(&mut buffer)?;
+
+                if n == 0 {
+                    break;
                 }
-                Err(e) => return Err(e),
+
+                io::stdout().write_all(&buffer[..n])?;
+            }
+
+            let status = child.wait()?;
+
+            match status.code() {
+                Some(code) => {
+                    return Ok(ExitCode::from(to_exit_code(code)));
+                }
+                None => {
+                    return Ok(ExitCode::FAILURE);
+                }
             }
         }
         _ => {
